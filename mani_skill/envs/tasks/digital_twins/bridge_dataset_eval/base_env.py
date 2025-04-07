@@ -125,6 +125,31 @@ class WidowX250SBridgeDatasetFlatTable(WidowX250S):
         return dict(arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos=controller)
 
 
+class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
+
+    @property
+    def _sensor_configs(self):
+        return super()._sensor_configs + [
+            CameraConfig(
+                uid="external_camera",
+                # the camera used for real evaluation for the sink setup
+                pose=sapien.Pose(
+                    [0.80, 0.0, 0.1],
+                    [0.0, 0.0, 0.0, 1.0],
+                ),
+                entity_uid="base_link",
+                width=640,
+                # fov=1.5,
+                height=480,
+                near=0.01,
+                far=10,
+                intrinsic=np.array(
+                    [[623.588, 0, 319.501], [0, 623.588, 239.545], [0, 0, 1]]
+                ),
+            ),
+        ]
+
+
 # Tuned for the sink setup
 @register_agent(asset_download_ids=["widowx250s"])
 class WidowX250SBridgeDatasetSink(WidowX250SBridgeDatasetFlatTable):
@@ -183,7 +208,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                     BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_real_eval_1.png"
                 )
             }
-            robot_cls = WidowX250SBridgeDatasetFlatTable
+            # robot_cls = WidowX250SBridgeDatasetFlatTable
+            robot_cls = Hobot2BridgeFlatTable
         elif self.scene_setting == "sink":
             self.rgb_overlay_paths = {
                 "3rd_view_camera": str(
@@ -290,7 +316,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         scene_pose = sapien.Pose(q=[0.707, 0.707, 0, 0])
         scene_offset = np.array([-2.0634, -2.8313, 0.0])
         if self.scene_setting == "flat_table":
-            scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v1.glb")
+            # scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v1.glb")
+            scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/custom.glb")
 
         elif self.scene_setting == "sink":
             scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v2.glb")
