@@ -138,13 +138,12 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
                     [0.0, 0.0, 0.0, 1.0],
                 ),
                 entity_uid="base_link",
-                width=640,
-                # fov=1.5,
-                height=480,
+                width=228,
+                height=128,
                 near=0.01,
                 far=10,
                 intrinsic=np.array(
-                    [[623.588, 0, 319.501], [0, 623.588, 239.545], [0, 0, 1]]
+                    [[124.409, 0, 114.0], [0, 124.409, 64.0], [0, 0, 1]]
                 ),
             ),
         ]
@@ -180,7 +179,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     """Base Digital Twin environment for digital twins of the BridgeData v2"""
 
     MODEL_JSON = "info_bridge_custom_v0.json"
-    SUPPORTED_OBS_MODES = ["rgb+segmentation"]
+    SUPPORTED_OBS_MODES = ["rgb+depth+segmentation"]
     SUPPORTED_REWARD_MODES = ["none"]
     scene_setting: Literal["flat_table", "sink"] = "flat_table"
     objects_excluded_from_greenscreening: List[str] = []
