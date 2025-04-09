@@ -2,6 +2,7 @@
 Base environment for Bridge dataset environments
 """
 import os
+from pathlib import Path
 from typing import Dict, List, Literal
 
 import numpy as np
@@ -177,7 +178,10 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         self.target_obj_name = obj_names[1]
         self.xyz_configs = xyz_configs
         self.quat_configs = quat_configs
-        if self.scene_setting == "flat_table":
+        if (
+            self.scene_setting == "flat_table"
+            or self.scene_setting == "hobot2_flat_table"
+        ):
             self.rgb_overlay_paths = {
                 "3rd_view_camera": str(
                     BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_real_eval_1.png"
@@ -191,6 +195,10 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 )
             }
             robot_cls = WidowX250SBridgeDatasetSink
+
+        if kwargs.get("robot_cls", None) is not None:
+            robot_cls = kwargs["robot_cls"]
+            del kwargs["robot_cls"]
 
         self.model_db: Dict[str, Dict] = io_utils.load_json(
             BRIDGE_DATASET_ASSET_PATH / "custom/" / self.MODEL_JSON
@@ -289,7 +297,13 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         builder = self.scene.create_actor_builder()
         scene_pose = sapien.Pose(q=[0.707, 0.707, 0, 0])
         scene_offset = np.array([-2.0634, -2.8313, 0.0])
-        if self.scene_setting == "flat_table":
+        if self.scene_setting == "hobot2_flat_table":
+            scene_file = str(
+                Path(__file__).parents[5]
+                / "hobot2_custom_files/hobot2_bridge_tabletop_scene.glb"
+            )
+
+        elif self.scene_setting == "flat_table":
             scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v1.glb")
 
         elif self.scene_setting == "sink":
@@ -388,7 +402,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 if self.gpu_sim_enabled:
                     self.scene._gpu_fetch_all()
             # measured values for bridge dataset
-            if self.scene_setting == "flat_table":
+            if self.scene_setting == "flat_table" or self.scene_setting == "hobot2_flat_table":
                 qpos = np.array(
                     [
                         -0.01840777,
