@@ -153,13 +153,15 @@ class PutEggplantInBasketScene(BaseBridgeEnv):
 
 @register_env(
     "StackGreenCubeOnYellowCubeBakedTexInScene-v1",
-    max_episode_steps=60,
+    max_episode_steps=None,
     asset_download_ids=["bridge_v2_real2sim"],
 )
 class StackGreenCubeOnYellowCubeBakedTexInScene(BaseBridgeEnv):
+    scene_setting = "hobot2_flat_table"
     MODEL_JSON = "info_bridge_custom_baked_tex_v0.json"
     objects_excluded_from_greenscreening = [
-        "baked_green_cube_3cm",
+        # "baked_green_cube_3cm",
+        "baked_red_cube_3cm",
         "baked_yellow_cube_3cm",
     ]
 
@@ -196,7 +198,8 @@ class StackGreenCubeOnYellowCubeBakedTexInScene(BaseBridgeEnv):
         quat_configs = [np.array([[1, 0, 0, 0], [1, 0, 0, 0]])]
         quat_configs = torch.tensor(quat_configs)
         xyz_configs = torch.tensor(np.stack(xyz_configs))
-        source_obj_name = "baked_green_cube_3cm"
+        source_obj_name = "baked_red_cube_3cm"
+        # source_obj_name = "baked_green_cube_3cm"
         target_obj_name = "baked_yellow_cube_3cm"
         super().__init__(
             obj_names=[source_obj_name, target_obj_name],

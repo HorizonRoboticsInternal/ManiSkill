@@ -3,6 +3,7 @@ Base environment for Bridge dataset environments
 """
 import os
 from typing import Dict, List, Literal
+from pathlib import Path
 
 import numpy as np
 import sapien
@@ -12,7 +13,7 @@ from transforms3d.quaternions import quat2mat
 
 from mani_skill import ASSET_DIR
 from mani_skill.agents.controllers.pd_ee_pose import PDEEPoseControllerConfig
-from mani_skill.agents.controllers.pd_joint_pos import PDJointPosMimicControllerConfig
+from mani_skill.agents.controllers.pd_joint_pos import PDJointPosMimicControllerConfig, PDJointPosControllerConfig
 from mani_skill.agents.registration import register_agent
 from mani_skill.agents.robots.widowx.widowx import WidowX250S
 from mani_skill.envs.tasks.digital_twins.base_env import BaseDigitalTwinEnv
@@ -126,9 +127,18 @@ class WidowX250SBridgeDatasetFlatTable(WidowX250S):
 
 
 class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
-
     @property
     def _sensor_configs(self):
+
+        scale = 3
+        width = 228 * scale
+        height = 128 * scale
+        intrinsic = np.array(
+                    [[124.409, 0, 114.0],
+                     [0, 124.409, 64.0],
+                     [0, 0, 1]])
+        intrinsic[:2] *= scale
+
         return super()._sensor_configs + [
             CameraConfig(
                 uid="external_camera",
@@ -138,15 +148,49 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
                     [0.0, 0.0, 0.0, 1.0],
                 ),
                 entity_uid="base_link",
-                width=228,
-                height=128,
+                width=width,
+                height=height,
                 near=0.01,
                 far=10,
-                intrinsic=np.array(
-                    [[124.409, 0, 114.0], [0, 124.409, 64.0], [0, 0, 1]]
-                ),
+                intrinsic=intrinsic,
             ),
         ]
+
+    @property
+    def _controller_configs(self):
+        arm_common_kwargs = dict(
+            joint_names=self.arm_joint_names,
+            lower=[-1.5, -1.3, -1.3, -2.1, -1.38, -2.1],
+            upper=[1.5, 1.8, 1.3, 2.1, 2.1, 2.1],
+            stiffness=self.arm_stiffness,
+            damping=self.arm_damping,
+            force_limit=self.arm_force_limit,
+            friction=self.arm_friction,
+            use_delta=False,
+            interpolate=True,
+            normalize_action=False,
+        )
+        arm_pd_absolute_joint_target = PDJointPosControllerConfig(
+            **arm_common_kwargs
+        )
+
+        extra_gripper_clearance = 0.001  # since real gripper is PID, we use extra clearance to mitigate PD small errors; also a trick to have force when grasping
+        gripper_pd_joint_pos = PDJointPosMimicControllerConfig(
+            joint_names=self.gripper_joint_names,
+            lower=0.015 - extra_gripper_clearance,
+            upper=0.037 + extra_gripper_clearance,
+            stiffness=self.gripper_stiffness,
+            damping=self.gripper_damping,
+            force_limit=self.gripper_force_limit,
+            normalize_action=True,
+            drive_mode="force",
+        )
+        controller = dict(
+            arm=arm_pd_absolute_joint_target, gripper=gripper_pd_joint_pos
+        )
+        # return dict(arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos=controller)
+        return dict(arm_pd_absolute_joint_target_gripper_pd_joint_pos=controller)
+
 
 
 # Tuned for the sink setup
@@ -181,7 +225,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     MODEL_JSON = "info_bridge_custom_v0.json"
     SUPPORTED_OBS_MODES = ["rgb+depth+segmentation"]
     SUPPORTED_REWARD_MODES = ["none"]
-    scene_setting: Literal["flat_table", "sink"] = "flat_table"
+    scene_setting: Literal["flat_table", "sink", "hobot2_flat_table"] = "flat_table"
     objects_excluded_from_greenscreening: List[str] = []
     """object ids that should not be greenscreened"""
 
@@ -201,14 +245,20 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         self.target_obj_name = obj_names[1]
         self.xyz_configs = xyz_configs
         self.quat_configs = quat_configs
-        if self.scene_setting == "flat_table":
+        if self.scene_setting == "hobot2_flat_table":
             self.rgb_overlay_paths = {
                 "3rd_view_camera": str(
                     BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_real_eval_1.png"
                 )
             }
-            # robot_cls = WidowX250SBridgeDatasetFlatTable
             robot_cls = Hobot2BridgeFlatTable
+        elif self.scene_setting == "flat_table":
+            self.rgb_overlay_paths = {
+                "3rd_view_camera": str(
+                    BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_real_eval_1.png"
+                )
+            }
+            robot_cls = WidowX250SBridgeDatasetFlatTable
         elif self.scene_setting == "sink":
             self.rgb_overlay_paths = {
                 "3rd_view_camera": str(
@@ -314,10 +364,10 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         builder = self.scene.create_actor_builder()
         scene_pose = sapien.Pose(q=[0.707, 0.707, 0, 0])
         scene_offset = np.array([-2.0634, -2.8313, 0.0])
-        if self.scene_setting == "flat_table":
-            # scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v1.glb")
-            scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/custom.glb")
-
+        if self.scene_setting == "hobot2_flat_table":
+            scene_file = str(Path(__file__).parents[5] / 'hobot2_envs/custom.glb')
+        elif self.scene_setting == "flat_table":
+            scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v1.glb")
         elif self.scene_setting == "sink":
             scene_file = str(BRIDGE_DATASET_ASSET_PATH / "stages/bridge_table_1_v2.glb")
         builder.add_nonconvex_collision_from_file(scene_file, pose=scene_pose)
@@ -414,7 +464,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 if self.gpu_sim_enabled:
                     self.scene._gpu_fetch_all()
             # measured values for bridge dataset
-            if self.scene_setting == "flat_table":
+            if self.scene_setting == "flat_table" or self.scene_setting == "hobot2_flat_table":
                 qpos = np.array(
                     [
                         -0.01840777,
