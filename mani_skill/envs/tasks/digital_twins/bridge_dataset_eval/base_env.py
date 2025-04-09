@@ -2,6 +2,7 @@
 Base environment for Bridge dataset environments
 """
 import os
+from alf import configurable
 from typing import Dict, List, Literal
 from pathlib import Path
 
@@ -9,7 +10,6 @@ import numpy as np
 import sapien
 import torch
 from sapien.physx import PhysxMaterial
-from transforms3d.quaternions import quat2mat
 
 from mani_skill import ASSET_DIR
 from mani_skill.agents.controllers.pd_ee_pose import PDEEPoseControllerConfig
@@ -127,6 +127,11 @@ class WidowX250SBridgeDatasetFlatTable(WidowX250S):
 
 
 class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
+
+    @configurable
+    def camera_width_and_scale(self, width: int, height: int):
+        return width, height
+
     @property
     def _sensor_configs(self):
 
@@ -151,7 +156,7 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
                 width=width,
                 height=height,
                 near=0.01,
-                far=10,
+                far=2.0,
                 intrinsic=intrinsic,
             ),
         ]
@@ -177,8 +182,10 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
         extra_gripper_clearance = 0.001  # since real gripper is PID, we use extra clearance to mitigate PD small errors; also a trick to have force when grasping
         gripper_pd_joint_pos = PDJointPosMimicControllerConfig(
             joint_names=self.gripper_joint_names,
-            lower=0.015 - extra_gripper_clearance,
-            upper=0.037 + extra_gripper_clearance,
+            # lower=0.015 - extra_gripper_clearance,
+            # upper=0.037 + extra_gripper_clearance,
+            lower=-0.04,
+            upper=0.04,
             stiffness=self.gripper_stiffness,
             damping=self.gripper_damping,
             force_limit=self.gripper_force_limit,
@@ -225,7 +232,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     MODEL_JSON = "info_bridge_custom_v0.json"
     SUPPORTED_OBS_MODES = ["rgb+depth+segmentation"]
     SUPPORTED_REWARD_MODES = ["none"]
-    scene_setting: Literal["flat_table", "sink", "hobot2_flat_table"] = "flat_table"
+    scene_setting: Literal["flat_table", "sink"] = "flat_table"
     objects_excluded_from_greenscreening: List[str] = []
     """object ids that should not be greenscreened"""
 
@@ -554,85 +561,98 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         z_flag_required_offset=0.02,
         **kwargs,
     ):
-        source_object = self.objs[self.source_obj_name]
-        target_object = self.objs[self.target_obj_name]
-        source_obj_pose = source_object.pose
-        target_obj_pose = target_object.pose
 
-        # whether moved the correct object
-        source_obj_xy_move_dist = torch.linalg.norm(
-            self.episode_source_obj_xyz_after_settle[:, :2] - source_obj_pose.p[:, :2],
-            dim=1,
-        )
-        other_obj_xy_move_dist = []
-        for obj_name in self.objs.keys():
-            obj = self.objs[obj_name]
-            obj_xyz_after_settle = self.episode_obj_xyzs_after_settle[obj_name]
-            if obj.name == self.source_obj_name:
-                continue
-            other_obj_xy_move_dist.append(
-                torch.linalg.norm(
-                    obj_xyz_after_settle[:, :2] - obj.pose.p[:, :2], dim=1
+        with torch.device('cpu'):
+            source_object = self.objs[self.source_obj_name]
+            target_object = self.objs[self.target_obj_name]
+            source_obj_pose = source_object.pose
+            target_obj_pose = target_object.pose
+
+            # whether moved the correct object
+            source_obj_xy_move_dist = torch.linalg.norm(
+                self.episode_source_obj_xyz_after_settle[:, :2] - source_obj_pose.p[:, :2],
+                dim=1,
+            )
+            other_obj_xy_move_dist = []
+            for obj_name in self.objs.keys():
+                obj = self.objs[obj_name]
+                obj_xyz_after_settle = self.episode_obj_xyzs_after_settle[obj_name]
+                if obj.name == self.source_obj_name:
+                    continue
+                other_obj_xy_move_dist.append(
+                    torch.linalg.norm(
+                        obj_xyz_after_settle[:, :2] - obj.pose.p[:, :2], dim=1
+                    )
                 )
+            # moved_correct_obj = (source_obj_xy_move_dist > 0.03) and (
+            #     all([x < source_obj_xy_move_dist for x in other_obj_xy_move_dist])
+            # )
+            # moved_wrong_obj = any([x > 0.03 for x in other_obj_xy_move_dist]) and any(
+            #     [x > source_obj_xy_move_dist for x in other_obj_xy_move_dist]
+            # )
+            # moved_correct_obj = False
+            # moved_wrong_obj = False
+
+            # whether the source object is grasped
+            is_src_obj_grasped = self.agent.is_grasping(source_object)
+            # if is_src_obj_grasped:
+            self.consecutive_grasp += is_src_obj_grasped
+            self.consecutive_grasp[is_src_obj_grasped == 0] = 0
+            consecutive_grasp = self.consecutive_grasp >= 5
+
+            # whether the source object is on the target object based on bounding box position
+            tgt_obj_half_length_bbox = (
+                self.episode_target_obj_bbox_world / 2
+            )  # get half-length of bbox xy diagonol distance in the world frame at timestep=0
+            src_obj_half_length_bbox = self.episode_source_obj_bbox_world / 2
+
+            pos_src = source_obj_pose.p
+            pos_tgt = target_obj_pose.p
+            offset = pos_src - pos_tgt
+            xy_flag = (
+                torch.linalg.norm(offset[:, :2], dim=1)
+                <= torch.linalg.norm(tgt_obj_half_length_bbox[:2]) + 0.003
             )
-        # moved_correct_obj = (source_obj_xy_move_dist > 0.03) and (
-        #     all([x < source_obj_xy_move_dist for x in other_obj_xy_move_dist])
-        # )
-        # moved_wrong_obj = any([x > 0.03 for x in other_obj_xy_move_dist]) and any(
-        #     [x > source_obj_xy_move_dist for x in other_obj_xy_move_dist]
-        # )
-        # moved_correct_obj = False
-        # moved_wrong_obj = False
-
-        # whether the source object is grasped
-        is_src_obj_grasped = self.agent.is_grasping(source_object)
-        # if is_src_obj_grasped:
-        self.consecutive_grasp += is_src_obj_grasped
-        self.consecutive_grasp[is_src_obj_grasped == 0] = 0
-        consecutive_grasp = self.consecutive_grasp >= 5
-
-        # whether the source object is on the target object based on bounding box position
-        tgt_obj_half_length_bbox = (
-            self.episode_target_obj_bbox_world / 2
-        )  # get half-length of bbox xy diagonol distance in the world frame at timestep=0
-        src_obj_half_length_bbox = self.episode_source_obj_bbox_world / 2
-
-        pos_src = source_obj_pose.p
-        pos_tgt = target_obj_pose.p
-        offset = pos_src - pos_tgt
-        xy_flag = (
-            torch.linalg.norm(offset[:, :2], dim=1)
-            <= torch.linalg.norm(tgt_obj_half_length_bbox[:2]) + 0.003
-        )
-        z_flag = (offset[:, 2] > 0) & (
-            offset[:, 2] - tgt_obj_half_length_bbox[2] - src_obj_half_length_bbox[2]
-            <= z_flag_required_offset
-        )
-        src_on_target = xy_flag & z_flag
-        # src_on_target = False
-
-        if success_require_src_completely_on_target:
-            # whether the source object is on the target object based on contact information
-            contact_forces = self.scene.get_pairwise_contact_forces(
-                source_object, target_object
+            z_flag = (offset[:, 2] > 0) & (
+                offset[:, 2] - tgt_obj_half_length_bbox[2] - src_obj_half_length_bbox[2]
+                <= z_flag_required_offset
             )
-            net_forces = torch.linalg.norm(contact_forces, dim=1)
-            src_on_target = src_on_target & (net_forces > 0.05)
+            src_on_target = xy_flag & z_flag
+            # src_on_target = False
 
-        success = src_on_target
+            if success_require_src_completely_on_target:
+                # whether the source object is on the target object based on contact information
+                contact_forces = self.scene.get_pairwise_contact_forces(
+                    source_object, target_object
+                )
+                net_forces = torch.linalg.norm(contact_forces, dim=1)
+                src_on_target = src_on_target & (net_forces > 0.05)
 
-        # self.episode_stats["moved_correct_obj"] = moved_correct_obj
-        # self.episode_stats["moved_wrong_obj"] = moved_wrong_obj
-        self.episode_stats["src_on_target"] = src_on_target
-        self.episode_stats["is_src_obj_grasped"] = (
-            self.episode_stats["is_src_obj_grasped"] | is_src_obj_grasped
-        )
-        self.episode_stats["consecutive_grasp"] = (
-            self.episode_stats["consecutive_grasp"] | consecutive_grasp
-        )
+            success = src_on_target
 
-        return dict(**self.episode_stats, success=success)
+            # self.episode_stats["moved_correct_obj"] = moved_correct_obj
+            # self.episode_stats["moved_wrong_obj"] = moved_wrong_obj
+            self.episode_stats["src_on_target"] = src_on_target
+            self.episode_stats["is_src_obj_grasped"] = (
+                self.episode_stats["is_src_obj_grasped"] | is_src_obj_grasped
+            )
+            self.episode_stats["consecutive_grasp"] = (
+                self.episode_stats["consecutive_grasp"] | consecutive_grasp
+            )
+
+            return dict(**self.episode_stats, success=success)
 
     def is_final_subtask(self):
         # whether the current subtask is the final one, only meaningful for long-horizon tasks
         return True
+
+
+class Hobot2BridgeEnv(BaseBridgeEnv):
+    scene_setting: Literal["hobot2_flat_table"] = "hobot2_flat_table"
+
+    # In hobot2, we use 10Hz control frequency
+    # We'll also use a sim timestep of 5ms
+    @property
+    def _default_sim_config(self):
+        return SimConfig(sim_freq=200, control_freq=10, spacing=20)
+
