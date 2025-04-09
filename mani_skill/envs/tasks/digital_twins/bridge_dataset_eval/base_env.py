@@ -165,6 +165,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     obj_static_friction = 0.5
     obj_dynamic_friction = 0.5
 
+    HOBOT2_CUSTOM_FILES = Path(__file__).parents[5] / "hobot2_custom_files"
+
     def __init__(
         self,
         obj_names: List[str],
@@ -200,9 +202,14 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             robot_cls = kwargs["robot_cls"]
             del kwargs["robot_cls"]
 
-        self.model_db: Dict[str, Dict] = io_utils.load_json(
-            BRIDGE_DATASET_ASSET_PATH / "custom/" / self.MODEL_JSON
-        )
+        if "hobot2" in self.scene_setting:
+            self.model_db = io_utils.load_json(self.HOBOT2_CUSTOM_FILES /
+                                               self.MODEL_JSON)
+        else:
+            self.model_db: Dict[str, Dict] = io_utils.load_json(
+                BRIDGE_DATASET_ASSET_PATH / "custom/" / self.MODEL_JSON
+            )
+
         super().__init__(
             robot_uids=robot_cls,
             **kwargs,
@@ -245,7 +252,12 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             restitution=0.0,
         )
         builder = self.scene.create_actor_builder()
+
         model_dir = BRIDGE_DATASET_ASSET_PATH / "custom" / "models" / model_id
+
+        # Make sure to route to the proper Hobot2 custom files directory
+        if not model_dir.exists():
+            model_dir = self.HOBOT2_CUSTOM_FILES / model_id
 
         collision_file = str(model_dir / "collision.obj")
         builder.add_multiple_convex_collisions_from_file(
@@ -298,9 +310,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         scene_pose = sapien.Pose(q=[0.707, 0.707, 0, 0])
         scene_offset = np.array([-2.0634, -2.8313, 0.0])
         if self.scene_setting == "hobot2_flat_table":
-            scene_file = str(
-                Path(__file__).parents[5]
-                / "hobot2_custom_files/hobot2_bridge_tabletop_scene.glb"
+            scene_file = str(self.HOBOT2_CUSTOM_FILES /
+                "hobot2_bridge_tabletop_scene.glb"
             )
 
         elif self.scene_setting == "flat_table":
