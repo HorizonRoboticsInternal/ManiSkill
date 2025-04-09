@@ -280,7 +280,16 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
         ang_vel = self.root.get_angular_velocity()  # [N, 3]
         qpos = self.get_qpos()
         qvel = self.get_qvel()
-        return torch.hstack([pose.p, pose.q, vel, ang_vel, qpos, qvel])
+        return torch.hstack(
+            [
+                pose.p.cuda(),
+                pose.q.cuda(),
+                vel.cuda(),
+                ang_vel.cuda(),
+                qpos.cuda(),
+                qvel.cuda(),
+            ]
+        )
 
     def set_state(self, state: Array, env_idx: torch.Tensor = None):
         if self.scene.gpu_sim_enabled:
