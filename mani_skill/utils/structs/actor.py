@@ -137,7 +137,7 @@ class Actor(PhysxRigidDynamicComponentStruct[sapien.Entity]):
         else:
             vel = self.get_linear_velocity()  # [N, 3]
             ang_vel = self.get_angular_velocity()  # [N, 3]
-        return torch.hstack([pose.p, pose.q, vel, ang_vel])
+        return torch.hstack([pose.p.cuda(), pose.q.cuda(), vel.cuda(), ang_vel.cuda()])
 
     def set_state(self, state: Array, env_idx: torch.Tensor = None):
         if self.scene.gpu_sim_enabled:
