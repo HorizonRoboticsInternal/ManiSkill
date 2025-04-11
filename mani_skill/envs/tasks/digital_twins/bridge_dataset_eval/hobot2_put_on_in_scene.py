@@ -44,3 +44,43 @@ class Hobot2RedCubeScene(Hobot2BridgeEnv):
 
     def get_language_instruction(self, **kwargs):
         return ["stack the green block on the yellow block"] * self.num_envs
+
+
+@register_env(
+    "Hobot2EggplantScene",
+    max_episode_steps=None,
+    asset_download_ids=["bridge_v2_real2sim"],
+)
+class Hobot2EggplantScene(Hobot2BridgeEnv):
+    scene_setting = "hobot2_flat_table"
+    MODEL_JSON = "info_bridge_custom_v0.json"
+    objects_excluded_from_greenscreening = [
+        "eggplant",
+        "dummy_sink_target_plane",
+    ]
+
+    def __init__(
+            self,
+            **kwargs,
+    ):
+        # We don't care about the yellow cube, so just teleport it away for now
+
+        xyz_configs = torch.tensor([[-0.125, 0, 0.887529], [100, 0, 0]])
+        quat_configs = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]])
+        source_obj_name = "eggplant"
+        target_obj_name = "dummy_sink_target_plane"
+        super().__init__(
+            obj_names=[source_obj_name, target_obj_name],
+            xyz_configs=xyz_configs.unsqueeze(0),
+            quat_configs=quat_configs.unsqueeze(0),
+            **kwargs,
+        )
+
+    def evaluate(self):
+        info = super()._evaluate(
+            success_require_src_completely_on_target=True,
+        )
+        return info
+
+    def get_language_instruction(self, **kwargs):
+        return ["stack the green block on the yellow block"] * self.num_envs
