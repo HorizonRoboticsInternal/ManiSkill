@@ -54,7 +54,7 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
             joint_names=self.arm_joint_names,
             lower=self.JOINT_LOWER,
             upper=self.JOINT_UPPER,
-            stiffness=self.arm_stiffness,
+            stiffness=np.array(self.arm_stiffness)*2.0,
             damping=self.arm_damping,
             force_limit=self.arm_force_limit,
             friction=self.arm_friction,
