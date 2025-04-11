@@ -13,7 +13,7 @@ from mani_skill.utils.registration import register_env
 )
 class Hobot2RedCubeScene(Hobot2BridgeEnv):
     scene_setting = "hobot2_flat_table"
-    MODEL_JSON = "info_bridge_custom_baked_tex_v0.json"
+    MODEL_JSON = "hobot2_object_db.json"
     objects_excluded_from_greenscreening = [
         "baked_red_cube_3cm",
         "baked_yellow_cube_3cm",
@@ -36,11 +36,31 @@ class Hobot2RedCubeScene(Hobot2BridgeEnv):
             **kwargs,
         )
 
-    def evaluate(self):
-        info = super()._evaluate(
-            success_require_src_completely_on_target=True,
-        )
-        return info
+@register_env(
+    "Hobot2RedCubeTowelPlateScene",
+    max_episode_steps=None,
+    asset_download_ids=["bridge_v2_real2sim"],
+)
+class Hobot2RedCubeTowelPlateScene(Hobot2BridgeEnv):
+    scene_setting = "hobot2_flat_table"
+    MODEL_JSON = "hobot2_object_db.json"
+    objects_excluded_from_greenscreening = [
+        "baked_red_cube_3cm",
+        "bridge_plate_objaverse",
+        "table_cloth_generated"
+    ]
 
-    def get_language_instruction(self, **kwargs):
-        return ["stack the green block on the yellow block"] * self.num_envs
+    def __init__(
+            self,
+            **kwargs,
+    ):
+        xyz_configs = torch.tensor([[-0.05, 0, 0.887529],
+                                    [-0.15, -0.10, 0.88759],
+                                    [-0.15, 0.10, 0.88759]])
+        quat_configs = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
+        super().__init__(
+            obj_names=self.objects_excluded_from_greenscreening,
+            xyz_configs=xyz_configs.unsqueeze(0),
+            quat_configs=quat_configs.unsqueeze(0),
+            **kwargs,
+        )
