@@ -79,8 +79,194 @@ class Hobot2BridgeFlatTable(WidowX250SBridgeDatasetFlatTable):
         return dict(arm_pd_absolute_joint_target_gripper_pd_joint_pos=controller)
 
 
+def create_hollow_box2(scene, pos=[0, 0, 0], quat=[1, 0, 0, 0],
+                      outer_size=[0.2, 0.2, 0.2], wall_thickness=0.005,
+                      color=[0.8, 0.8, 0.8, 1], name="hollow_box",
+                      visual: bool = False,
+                      collision: bool = True):
+    """
+    Create a hollow box with four sides (no top/bottom) in SAPIEN.
+
+    Args:
+        scene: SAPIEN scene object
+        pos: Position [x, y, z] of the center of the box
+        quat: Quaternion [w, x, y, z] for orientation
+        outer_size: Outer dimensions [length, width, height] of the box
+        wall_thickness: Thickness of the walls
+        color: RGBA color of the box
+        name: Name of the actor
+
+    Returns:
+        The created actor
+    """
+    builder = scene.create_actor_builder()
+
+    length, width, height = outer_size
+    half_length, half_width, half_height = length / 2, width / 2, height / 2
+    half_thick = wall_thickness / 2
+
+    visual_material = sapien.render.RenderMaterial()
+    visual_material.set_base_color(color)
+
+    # Wall 1 (along x-axis, positive y)
+    wall1_pos = [0, half_width - half_thick, 0]
+    wall1_size = [half_length, half_thick, half_height]
+
+    # Wall 2 (along x-axis, negative y)
+    wall2_pos = [0, -half_width + half_thick, 0]
+    wall2_size = [half_length, half_thick, half_height]
+
+    # Wall 3 (along y-axis, positive x)
+    wall3_pos = [half_length - half_thick, 0, 0]
+    wall3_size = [half_thick, half_width - wall_thickness, half_height]
+
+    # Wall 4 (along y-axis, negative x)
+    wall4_pos = [-half_length + half_thick, 0, 0]
+    wall4_size = [half_thick, half_width - wall_thickness, half_height]
+
+    if visual:
+        builder.add_box_visual(half_size=wall1_size, pose=sapien.Pose(wall1_pos), material=visual_material)
+        builder.add_box_visual(half_size=wall2_size, pose=sapien.Pose(wall2_pos), material=visual_material)
+        builder.add_box_visual(half_size=wall3_size, pose=sapien.Pose(wall3_pos), material=visual_material)
+        builder.add_box_visual(half_size=wall4_size, pose=sapien.Pose(wall4_pos), material=visual_material)
+    if collision:
+        builder.add_box_collision(half_size=wall1_size, pose=sapien.Pose(wall1_pos))
+        builder.add_box_collision(half_size=wall2_size, pose=sapien.Pose(wall2_pos))
+        builder.add_box_collision(half_size=wall3_size, pose=sapien.Pose(wall3_pos))
+        builder.add_box_collision(half_size=wall4_size, pose=sapien.Pose(wall4_pos))
+
+    # Set the initial pose
+    builder.initial_pose = sapien.Pose(pos, quat)
+
+    # Build the actor
+    actor = builder.build_static(name=name)
+    return actor
+
+def create_hollow_box(scene, pos=[0, 0, 0], quat=[1, 0, 0, 0],
+                      outer_size=[0.2, 0.2, 0.2], wall_thickness=0.005,
+                      color=[0.8, 0.8, 0.8, 1], name="hollow_box",
+                      visual: bool = False,
+                      collision: bool = True,
+                      slope: float = 0.0):
+    """
+    Create a hollow box with four sides (no top/bottom) in SAPIEN.
+    Walls slope outwards going up in the z direction.
+
+    Args:
+        scene: SAPIEN scene object
+        pos: Position [x, y, z] of the center of the box
+        quat: Quaternion [w, x, y, z] for orientation
+        outer_size: Outer dimensions [length, width, height] of the box
+        wall_thickness: Thickness of the walls
+        color: RGBA color of the box
+        name: Name of the actor
+        visual: Whether to create visual geometries
+        collision: Whether to create collision geometries
+        slope: Wall outward slope in radians (0 = vertical walls)
+
+    Returns:
+        The created actor
+    """
+    import numpy as np
+    import math
+
+    builder = scene.create_actor_builder()
+
+    length, width, height = outer_size
+    half_length, half_width, half_height = length / 2, width / 2, height / 2
+    half_thick = wall_thickness / 2
+
+    visual_material = sapien.render.RenderMaterial()
+    visual_material.set_base_color(color)
+
+    # Calculate actual wall length accounting for the slope (hypotenuse)
+    wall_height = height / np.cos(abs(slope))
+    half_wall_height = wall_height / 2
+
+    # Helper function to create quaternion from axis-angle
+    def axis_angle_to_quat(axis, angle):
+        axis = np.array(axis)
+        axis = axis / np.linalg.norm(axis)  # Normalize axis
+
+        sin_half = math.sin(angle / 2)
+        cos_half = math.cos(angle / 2)
+
+        x = axis[0] * sin_half
+        y = axis[1] * sin_half
+        z = axis[2] * sin_half
+        w = cos_half
+
+        return [w, x, y, z]  # SAPIEN quaternion format is [w, x, y, z]
+
+    # For rotation around bottom edge, we need to:
+    # 1. Calculate the rotation quaternion
+    # 2. Move the pivot point to the bottom edge
+    # 3. Apply the rotation
+    # 4. Move the pivot point back
+
+    # Wall 1 (along x-axis, positive y) - rotation around x-axis at bottom edge
+    x_axis = [1, 0, 0]
+    wall1_rot = axis_angle_to_quat(x_axis, slope)
+
+    # Calculate the pivot point (at the bottom edge of the wall)
+    pivot_offset_z = -half_height
+
+    # Calculate the position after rotation around bottom edge
+    # The wall pivots around its bottom edge, which is at z = -half_height
+    # After rotation, the center moves up and slightly inward
+    wall1_pos_z = -half_height + half_wall_height * np.cos(slope)
+    wall1_pos_y = half_width - half_thick - half_wall_height * np.sin(slope)
+    wall1_pos = [0, wall1_pos_y, wall1_pos_z]
+    wall1_size = [half_length, half_thick, half_wall_height]
+    wall1_pose = sapien.Pose(wall1_pos, wall1_rot)
+
+    # Wall 2 (along x-axis, negative y) - rotation around x-axis at bottom edge
+    wall2_rot = axis_angle_to_quat(x_axis, -slope)
+    wall2_pos_z = -half_height + half_wall_height * np.cos(slope)
+    wall2_pos_y = -half_width + half_thick + half_wall_height * np.sin(slope)
+    wall2_pos = [0, wall2_pos_y, wall2_pos_z]
+    wall2_size = [half_length, half_thick, half_wall_height]
+    wall2_pose = sapien.Pose(wall2_pos, wall2_rot)
+
+    # Wall 3 (along y-axis, positive x) - rotation around y-axis at bottom edge
+    y_axis = [0, 1, 0]
+    wall3_rot = axis_angle_to_quat(y_axis, -slope)
+    wall3_pos_z = -half_height + half_wall_height * np.cos(slope)
+    wall3_pos_x = half_length - half_thick - half_wall_height * np.sin(slope)
+    wall3_pos = [wall3_pos_x, 0, wall3_pos_z]
+    wall3_size = [half_thick, half_width - wall_thickness, half_wall_height]
+    wall3_pose = sapien.Pose(wall3_pos, wall3_rot)
+
+    # Wall 4 (along y-axis, negative x) - rotation around y-axis at bottom edge
+    wall4_rot = axis_angle_to_quat(y_axis, slope)
+    wall4_pos_z = -half_height + half_wall_height * np.cos(slope)
+    wall4_pos_x = -half_length + half_thick + half_wall_height * np.sin(slope)
+    wall4_pos = [wall4_pos_x, 0, wall4_pos_z]
+    wall4_size = [half_thick, half_width - wall_thickness, half_wall_height]
+    wall4_pose = sapien.Pose(wall4_pos, wall4_rot)
+
+    if visual:
+        builder.add_box_visual(half_size=wall1_size, pose=wall1_pose, material=visual_material)
+        builder.add_box_visual(half_size=wall2_size, pose=wall2_pose, material=visual_material)
+        builder.add_box_visual(half_size=wall3_size, pose=wall3_pose, material=visual_material)
+        builder.add_box_visual(half_size=wall4_size, pose=wall4_pose, material=visual_material)
+    if collision:
+        builder.add_box_collision(half_size=wall1_size, pose=wall1_pose)
+        builder.add_box_collision(half_size=wall2_size, pose=wall2_pose)
+        builder.add_box_collision(half_size=wall3_size, pose=wall3_pose)
+        builder.add_box_collision(half_size=wall4_size, pose=wall4_pose)
+
+    # Set the initial pose
+    builder.initial_pose = sapien.Pose(pos, quat)
+
+    # Build the actor
+    actor = builder.build_static(name=name)
+    return actor
+
+
 class Hobot2BridgeEnv(BaseBridgeEnv):
-    SUPPORTED_OBS_MODES = ["rgb+depth+segmentation"]
+    # SUPPORTED_OBS_MODES = ["rgb+depth+segmentation"]
+    SUPPORTED_OBS_MODES = ["rgb+depth"]
     scene_setting: Literal["hobot2_flat_table"] = "hobot2_flat_table"
 
     def __init__(self, **kwargs):
@@ -92,3 +278,31 @@ class Hobot2BridgeEnv(BaseBridgeEnv):
     @property
     def _default_sim_config(self):
         return SimConfig(sim_freq=200, control_freq=10, spacing=20)
+
+    def _load_scene(self, options: dict):
+        super()._load_scene(options)
+
+        # Note that the robot is positioned at
+        # sapien.Pose(p=[0.127, 0.060, 0.85], q=[0, 0, 0, 1])
+        # in the global frame.
+
+        # create_hollow_box(self.scene, pos=[-0.125, 0 , 0.88759],
+        #                   quat=[1, 0, 0, 0])
+        box_pos = np.array([-0.23, -0.06, 0.88759])
+        box_pos[:2] += np.array([0.127, 0.060, 0.85])[:2]
+        box_size = np.array([0.14, 0.24, 0.04])
+        tolerance = 0.03
+        box_size[:2] += tolerance
+        create_hollow_box(self.scene, pos=box_pos,
+                          quat=[1, 0, 0, 0],
+                          outer_size=box_size,
+                          visual=True,
+                          slope=np.deg2rad(-60))
+
+        create_hollow_box2(self.scene, pos=box_pos,
+                          quat=[1, 0, 0, 0],
+                          outer_size=box_size,
+                          name='temp',
+                          visual=True)
+
+
