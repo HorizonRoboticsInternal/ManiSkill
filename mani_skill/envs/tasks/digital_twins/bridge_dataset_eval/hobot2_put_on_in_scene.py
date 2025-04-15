@@ -89,10 +89,12 @@ class Hobot2SpoonTowelScene(Hobot2BridgeEnv):
     ):
         # We don't care about the yellow cube, so just teleport it away for now
 
-        xyz_configs = torch.tensor([[-0.16, 0.05, 0.887529], [-0.075, 0.05,
-                                                            0.887529]])
-        # quat_configs = torch.tensor([[0.707, 0.0, 0, 0.707], [1, 0, 0, 0]])
-        quat_configs = torch.tensor([[1.0, 0.0, 0, 0.0], [1, 0, 0, 0]])
+        # xyz_configs = torch.tensor([[-0.20, 0.05, 0.887529], [-0.075, 0.05,
+        #                                                     0.887529]])
+        xyz_configs = torch.tensor([[-0.25, 0.05, 0.887529], [-0.075, 0.0,
+                                                              0.887529]])
+        quat_configs = torch.tensor([[0.707, 0.0, 0, 0.707], [1, 0, 0, 0]])
+        # quat_configs = torch.tensor([[1.0, 0.0, 0, 0.0], [1, 0, 0, 0]])
         source_obj_name = "bridge_spoon_generated_modified"
         target_obj_name = "table_cloth_generated_shorter"
         super().__init__(

@@ -224,9 +224,12 @@ class Hobot2BridgeEnv(BaseBridgeEnv):
 
     # In hobot2, we use 10Hz control frequency
     # We'll also use a sim timestep of 5ms
+    # @property
+    # def _default_sim_config(self):
+    #     return SimConfig(sim_freq=200, control_freq=10, spacing=20)
     @property
     def _default_sim_config(self):
-        return SimConfig(sim_freq=200, control_freq=10, spacing=20)
+        return SimConfig(sim_freq=500, control_freq=5, spacing=20)
 
     def _load_scene(self, options: dict):
         super()._load_scene(options)
