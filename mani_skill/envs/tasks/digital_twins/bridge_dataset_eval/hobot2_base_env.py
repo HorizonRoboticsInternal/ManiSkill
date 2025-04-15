@@ -217,8 +217,9 @@ class Hobot2BridgeEnv(BaseBridgeEnv):
     # in the global frame.
     robot_pose_in_global = np.array([0.127, 0.060, 0.85])
 
-    def __init__(self, **kwargs):
+    def __init__(self, add_tray: bool = True, **kwargs):
         kwargs["robot_cls"] = Hobot2BridgeFlatTable
+        self._add_tray = add_tray
         super().__init__(**kwargs)
 
     # In hobot2, we use 10Hz control frequency
@@ -229,6 +230,9 @@ class Hobot2BridgeEnv(BaseBridgeEnv):
 
     def _load_scene(self, options: dict):
         super()._load_scene(options)
+
+        if not self._add_tray:
+            return
 
         # This center position was computed from Hobot
         box_pos = np.array([-0.23, -0.06, 0.88759])
