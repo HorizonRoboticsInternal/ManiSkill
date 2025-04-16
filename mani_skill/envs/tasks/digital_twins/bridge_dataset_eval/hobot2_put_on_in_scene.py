@@ -91,15 +91,15 @@ class Hobot2SpoonTowelScene(Hobot2BridgeEnv):
 
         # xyz_configs = torch.tensor([[-0.20, 0.05, 0.887529], [-0.075, 0.05,
         #                                                     0.887529]])
-        xyz_configs = torch.tensor([[-0.25, 0.05, 0.887529], [-0.075, 0.0,
+        # xyz_configs = torch.tensor([[-0.25, 0.05, 0.887529], [-0.075, 0.0,
+        #                                                       0.887529]])
+        xyz_configs = torch.tensor([[-0.125, 0.10, 0.887529], [-0.075, -0.10,
                                                               0.887529]])
-        quat_configs = torch.tensor([[0.707, 0.0, 0, 0.707], [1, 0, 0, 0]])
-        # quat_configs = torch.tensor([[1.0, 0.0, 0, 0.0], [1, 0, 0, 0]])
-        source_obj_name = "bridge_spoon_generated_modified"
-        target_obj_name = "table_cloth_generated_shorter"
+        # quat_configs = torch.tensor([[0.707, 0.0, 0, 0.707], [1, 0, 0, 0]])
+        quat_configs = torch.tensor([[1.0, 0.0, 0, 0.0], [1, 0, 0, 0]])
         super().__init__(
-            add_tray=False,
-            obj_names=[source_obj_name, target_obj_name],
+            add_tray=True,
+            obj_names=self.objects_excluded_from_greenscreening,
             xyz_configs=xyz_configs.unsqueeze(0),
             quat_configs=quat_configs.unsqueeze(0),
             **kwargs,
@@ -115,22 +115,24 @@ class Hobot2RedCubeTowelPlateScene(Hobot2BridgeEnv):
     scene_setting = "hobot2_flat_table"
     MODEL_JSON = "hobot2_object_db.json"
     objects_excluded_from_greenscreening = [
-        "baked_red_cube_3cm",
+        "bridge_spoon_generated_modified",
+        # "baked_red_cube_3cm",
+        "table_cloth_generated_shorter",
         "bridge_plate_objaverse",
-        "table_cloth_generated"
     ]
 
     def __init__(
             self,
             **kwargs,
     ):
-        xyz_configs = torch.tensor([[-0.05, 0, 0.887529],
-                                    [-0.15, -0.10, 0.88759],
-                                    [-0.15, 0.10, 0.88759]])
+        xyz_configs = torch.tensor([[-0.20, 0, 0.887529],
+                                    [-0.075, -0.10, 0.88759],
+                                    [-0.075, 0.10, 0.88759]])
         quat_configs = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
         super().__init__(
+            add_tray=False,
             obj_names=self.objects_excluded_from_greenscreening,
-            xyz_configs=xyz_configs.unsqueeze(0),
-            quat_configs=quat_configs.unsqueeze(0),
+            xyz_configs=xyz_configs[:3].unsqueeze(0),
+            quat_configs=quat_configs[:3].unsqueeze(0),
             **kwargs,
         )
