@@ -94,13 +94,14 @@ def main(argv):
         packages=find_packages(include=["mani_skill*"]),
         python_requires=">=3.9",
         setup_requires=["setuptools>=62.3.0"],
-        install_requires=get_dependencies(),
+        install_requires=[],
         # Glob patterns do not automatically match dotfiles
         package_data={
             "mani_skill": ["assets/**", "envs/**/*", "utils/**/*"],
             "warp_maniskill.warp": ["native/*", "native/nanovdb/*"],
         },
         extras_require={
+            "dependencies": get_dependencies(),
             "dev": [
                 "pytest",
                 "black",
