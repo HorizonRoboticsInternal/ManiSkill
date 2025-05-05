@@ -63,19 +63,8 @@ class EnvSpec:
                         f"Could not find asset {asset_id} at {data_source.output_dir / data_source.target_path}"
                     )
         if len(assets_to_download) > 0:
-            if len(assets_to_download) <= 5:
-                asset_download_msg = ", ".join(assets_to_download)
-            else:
-                asset_download_msg = f"{assets_to_download[:5]} (and {len(assets_to_download) - 10} more)"
-            response = download_asset.prompt_yes_no(
-                f"Environment {self.uid} requires asset(s) {asset_download_msg} which could not be found. Would you like to download them now?"
-            )
-            if response:
-                for asset_id in assets_to_download:
-                    download_asset.download(assets.DATA_SOURCES[asset_id])
-            else:
-                print("Exiting as assets are not found or downloaded")
-                exit()
+            for asset_id in assets_to_download:
+                download_asset.download(assets.DATA_SOURCES[asset_id])
         return self.cls(**_kwargs)
 
     @property

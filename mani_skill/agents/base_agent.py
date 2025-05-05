@@ -180,21 +180,12 @@ class BaseAgent:
                     self.uid in assets.DATA_GROUPS
                     or len(assets.DATA_GROUPS[self.uid]) > 0
                 ):
-                    response = download_asset.prompt_yes_no(
-                        f"Robot {self.uid} has assets available for download. Would you like to download them now?"
-                    )
-                    if response:
-                        for (
-                            asset_id
-                        ) in assets.expand_data_group_into_individual_data_source_ids(
-                            self.uid
-                        ):
-                            download_asset.download(assets.DATA_SOURCES[asset_id])
-                    else:
-                        print(
-                            f"Exiting as assets for robot {self.uid} are not downloaded"
-                        )
-                        exit()
+                    for (
+                        asset_id
+                    ) in assets.expand_data_group_into_individual_data_source_ids(
+                        self.uid
+                    ):
+                        download_asset.download(assets.DATA_SOURCES[asset_id])
                 else:
                     print(
                         f"Exiting as assets for robot {self.uid} are not found. Check that this agent is properly registered with the appropriate download asset ids"
