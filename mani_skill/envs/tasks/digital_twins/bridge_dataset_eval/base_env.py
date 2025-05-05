@@ -396,22 +396,27 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 actor.set_pose(
                     Pose.create_from_pq(p=xyz, q=self.quat_configs[quat_episode_ids, i])
                 )
-            if self.gpu_sim_enabled:
-                self.scene._gpu_apply_all()
-            self._settle(0.5)
-            if self.gpu_sim_enabled:
-                self.scene._gpu_fetch_all()
-            # Some objects need longer time to settle
-            lin_vel, ang_vel = 0.0, 0.0
-            for obj_name, obj in self.objs.items():
-                lin_vel += torch.linalg.norm(obj.linear_velocity)
-                ang_vel += torch.linalg.norm(obj.angular_velocity)
-            if lin_vel > 1e-3 or ang_vel > 1e-2:
-                if self.gpu_sim_enabled:
-                    self.scene._gpu_apply_all()
-                self._settle(6)
-                if self.gpu_sim_enabled:
-                    self.scene._gpu_fetch_all()
+            # NOTE!!!!!!!
+            # During GPU parallel stepping, calling self._settle() will affect
+            # all simulations regardless of supplying env_idx. This causes
+            # significant drift. Therefore, we just comment it out.
+
+            # if self.gpu_sim_enabled:
+            #     self.scene._gpu_apply_all()
+            # self._settle(0.5)
+            # if self.gpu_sim_enabled:
+            #     self.scene._gpu_fetch_all()
+            # # Some objects need longer time to settle
+            # lin_vel, ang_vel = 0.0, 0.0
+            # for obj_name, obj in self.objs.items():
+            #     lin_vel += torch.linalg.norm(obj.linear_velocity)
+            #     ang_vel += torch.linalg.norm(obj.angular_velocity)
+            # if lin_vel > 1e-3 or ang_vel > 1e-2:
+            #     if self.gpu_sim_enabled:
+            #         self.scene._gpu_apply_all()
+            #     self._settle(6)
+            #     if self.gpu_sim_enabled:
+            #         self.scene._gpu_fetch_all()
             # measured values for bridge dataset
             if self.scene_setting == "flat_table" or self.scene_setting == "hobot2_flat_table":
                 qpos = np.array(
