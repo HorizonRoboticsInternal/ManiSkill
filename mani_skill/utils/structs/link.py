@@ -268,9 +268,14 @@ class Link(PhysxRigidBodyComponentStruct[physx.PhysxArticulationLinkComponent]):
                 new_pose[:, 3:] = arg1[:, 3:]
                 new_pose[:, :3] = new_xyzs
                 arg1 = new_pose
-            self.px.cuda_rigid_body_data.torch()[
-                self._body_data_index[self.scene._reset_mask[self._scene_idxs]], :7
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            mask = self._body_data_index[self.scene._reset_mask[self._scene_idxs]]
+            self.px.cuda_rigid_body_data.torch()[mask, :7] = (
+                arg1.expand(mask.shape[0], 7))
+
         else:
             if isinstance(arg1, sapien.Pose):
                 for obj in self._objs:

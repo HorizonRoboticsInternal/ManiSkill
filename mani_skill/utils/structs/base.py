@@ -369,9 +369,15 @@ class PhysxRigidDynamicComponentStruct(PhysxRigidBodyComponentStruct[T], Generic
     def angular_velocity(self, arg1: Array):
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self._body_data[
-                self._body_data_index[self.scene._reset_mask[self._scene_idxs]], 10:13
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (3,)
+            mask = self._body_data_index[self.scene._reset_mask[self._scene_idxs]]
+            self._body_data[mask, 10:13] = arg1.reshape((1, -1)).expand(
+                mask.shape[0], 3)
+
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
@@ -442,9 +448,14 @@ class PhysxRigidDynamicComponentStruct(PhysxRigidBodyComponentStruct[T], Generic
     def linear_velocity(self, arg1: Array):
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self._body_data[
-                self._body_data_index[self.scene._reset_mask[self._scene_idxs]], 7:10
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (3,)
+            mask = self._body_data_index[self.scene._reset_mask[self._scene_idxs]]
+            self._body_data[mask, 7:10] = arg1.reshape((1, -1)).expand(
+                mask.shape[0], 3)
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:

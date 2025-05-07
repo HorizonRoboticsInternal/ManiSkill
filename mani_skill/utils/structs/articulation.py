@@ -694,10 +694,15 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
     def qf(self, arg1: torch.Tensor):
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self.px.cuda_articulation_qf.torch()[
-                self._data_index[self.scene._reset_mask[self._scene_idxs]],
-                : self.max_dof,
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (self.max_dof,)
+            mask = self._data_index[self.scene._reset_mask[self._scene_idxs]]
+            self.px.cuda_articulation_qf.torch()[mask, :self.max_dof] = (
+                arg1.reshape((1, -1)).expand(mask.shape[0], self.max_dof))
+
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
@@ -730,10 +735,15 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
     def qpos(self, arg1: torch.Tensor):
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self.px.cuda_articulation_qpos.torch()[
-                self._data_index[self.scene._reset_mask[self._scene_idxs]],
-                : self.max_dof,
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (self.max_dof,)
+            mask = self._data_index[self.scene._reset_mask[self._scene_idxs]]
+            self.px.cuda_articulation_qpos.torch()[mask, :self.max_dof] = (
+                arg1.reshape((1, -1)).expand(mask.shape[0], self.max_dof))
+
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
@@ -753,10 +763,15 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
     def qvel(self, arg1: torch.Tensor):
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self.px.cuda_articulation_qvel.torch()[
-                self._data_index[self.scene._reset_mask[self._scene_idxs]],
-                : self.max_dof,
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (self.max_dof, )
+            mask = self._data_index[self.scene._reset_mask[self._scene_idxs]]
+            self.px.cuda_articulation_qvel.torch()[mask, :self.max_dof] = (
+                arg1.reshape((1, -1)).expand(mask.shape[0], self.max_dof))
+
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
@@ -771,10 +786,15 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
     def root_angular_velocity(self, arg1: Array) -> None:
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self.px.cuda_rigid_body_data.torch()[
-                self.root._body_data_index[self.scene._reset_mask[self._scene_idxs]],
-                7:10,
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (3,)
+            mask = self.root._body_data_index[self.scene._reset_mask[
+                self._scene_idxs]]
+            self.px.cuda_rigid_body_data.torch()[mask, 7:10] = (
+                arg1.expand(mask.shape[0], 3))
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
@@ -789,10 +809,14 @@ class Articulation(BaseStruct[physx.PhysxArticulation]):
     def root_linear_velocity(self, arg1: Array) -> None:
         if self.scene.gpu_sim_enabled:
             arg1 = common.to_tensor(arg1, device=self.device)
-            self.px.cuda_rigid_body_data.torch()[
-                self.root._body_data_index[self.scene._reset_mask[self._scene_idxs]],
-                10:13,
-            ] = arg1
+
+            # NOTE: Broadcasting during torch deterministic index_put fails.
+            # Avoid broadcasting by expanding the matrix.
+            # https://github.com/pytorch/pytorch/issues/79987
+            assert arg1.shape == (3,)
+            mask = self.root._body_data_index[self.scene._reset_mask[self._scene_idxs]]
+            self.px.cuda_rigid_body_data.torch()[mask, 10:13] = (
+                arg1.reshape((1, -1)).expand(mask.shape[0], 3))
         else:
             arg1 = common.to_numpy(arg1)
             if len(arg1.shape) == 2:
