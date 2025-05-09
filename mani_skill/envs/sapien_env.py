@@ -1,7 +1,7 @@
 import copy
 import gc
 import os
-from functools import cached_property
+from functools import cached_property, partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import dacite
@@ -396,6 +396,9 @@ class BaseEnv(gym.Env):
                 robot_uids = [robot_uids]
             for i, robot_uid in enumerate(robot_uids):
                 if isinstance(robot_uid, type(BaseAgent)):
+                    agent_cls = robot_uid
+                elif isinstance(robot_uid, partial) and isinstance(
+                        robot_uid.func, type(BaseAgent)):
                     agent_cls = robot_uid
                 else:
                     if robot_uid not in REGISTERED_AGENTS:
