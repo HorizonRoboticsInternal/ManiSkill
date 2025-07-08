@@ -378,6 +378,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         # NOTE: this part of code is not GPU parallelized
         with torch.device(self.device):
+            reset_objects = options.get("reset_objects", True)
             b = len(env_idx)
             if "episode_id" in options:
                 if isinstance(options["episode_id"], int):
@@ -391,11 +392,14 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             else:
                 pos_episode_ids = torch.randint(0, len(self.xyz_configs), size=(b,))
                 quat_episode_ids = torch.randint(0, len(self.quat_configs), size=(b,))
-            for i, actor in enumerate(self.objs.values()):
-                xyz = self.xyz_configs[pos_episode_ids, i]
-                actor.set_pose(
-                    Pose.create_from_pq(p=xyz, q=self.quat_configs[quat_episode_ids, i])
-                )
+            if reset_objects:
+                for i, actor in enumerate(self.objs.values()):
+                    xyz = self.xyz_configs[pos_episode_ids, i]
+                    actor.set_pose(
+                        Pose.create_from_pq(p=xyz,
+                                            q=self.quat_configs[
+                                                quat_episode_ids, i])
+                    )
             # NOTE!!!!!!!
             # During GPU parallel stepping, calling self._settle() will affect
             # all simulations regardless of supplying env_idx. This causes
