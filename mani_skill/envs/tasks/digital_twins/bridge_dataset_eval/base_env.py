@@ -24,7 +24,10 @@ from mani_skill.utils.structs.actor import Actor
 from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import SimConfig
 
+from hobot2 import HOBOT2_ROOT
+
 BRIDGE_DATASET_ASSET_PATH = ASSET_DIR / "tasks/bridge_v2_real2sim_dataset/"
+HOBOT2_ASSET_PATH = ASSET_DIR / "hobot2_mani_skill_assets"
 # Real2Sim tuned WidowX250S robot
 @register_agent(asset_download_ids=["widowx250s"])
 class WidowX250SBridgeDatasetFlatTable(WidowX250S):
@@ -165,7 +168,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     obj_static_friction = 0.5
     obj_dynamic_friction = 0.5
 
-    HOBOT2_CUSTOM_FILES = Path(__file__).parents[5] / "hobot2_custom_files"
+    HOBOT2_CUSTOM_FILES = (Path(HOBOT2_ROOT) /
+               "environment/hobot2_mani_skill_files")
 
     def __init__(
         self,
@@ -253,11 +257,17 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         )
         builder = self.scene.create_actor_builder()
 
+        # Note: We won't perform mesh decomposition for the ManiSkill bridge
+        # dataset objects. This is the default behavior.
+        mesh_decomposition = "none"
         model_dir = BRIDGE_DATASET_ASSET_PATH / "custom" / "models" / model_id
 
-        # Make sure to route to the proper Hobot2 custom files directory
+        # Reroute to Hobot2 assets if necessary and enable mesh decomposition
+        # for custom objects. This is necessary for objects like bowls to
+        # have proper convex shapes instead of a simple bounding box.
         if not model_dir.exists():
-            model_dir = self.HOBOT2_CUSTOM_FILES / model_id
+            model_dir = HOBOT2_ASSET_PATH / model_id
+            mesh_decomposition = "coacd"
 
         collision_file = str(model_dir / "collision.obj")
         builder.add_multiple_convex_collisions_from_file(
@@ -265,6 +275,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             scale=[scale] * 3,
             material=physical_material,
             density=density,
+            decomposition=mesh_decomposition
         )
 
         visual_file = str(model_dir / "textured.obj")
@@ -326,7 +337,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         builder.build_static(name="arena")
 
         for name in self.obj_names:
-            self.objs[name] = self._build_actor_helper(name)
+            scale = self.model_db[name].get("scales", [1.0])[0]
+            self.objs[name] = self._build_actor_helper(name, scale=scale)
 
         self.xyz_configs = common.to_tensor(self.xyz_configs, device=self.device).to(
             torch.float32
