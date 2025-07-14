@@ -180,8 +180,6 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
     ):
         self.objs: Dict[str, Actor] = dict()
         self.obj_names = obj_names
-        self.source_obj_name = obj_names[0]
-        self.target_obj_name = obj_names[1]
         self.xyz_configs = xyz_configs
         self.quat_configs = quat_configs
         if (
@@ -336,8 +334,9 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         builder.initial_pose = sapien.Pose(-scene_offset)
         builder.build_static(name="arena")
 
+        # TODO: Can add scale sampling here if needed
         for name in self.obj_names:
-            scale = self.model_db[name].get("scales", [1.0])[0]
+            scale = self.model_db[name].get("scale", 1.0)
             self.objs[name] = self._build_actor_helper(name, scale=scale)
 
         self.xyz_configs = common.to_tensor(self.xyz_configs, device=self.device).to(
@@ -353,35 +352,6 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 kinematic=True,
                 initial_pose=sapien.Pose([-0.16, 0.13, 0.88], [1, 0, 0, 0]),
             )
-        # model scales
-        model_scales = None
-        if model_scales is None:
-            model_scales = dict()
-            for model_id in [self.source_obj_name, self.target_obj_name]:
-                this_available_model_scales = self.model_db[model_id].get(
-                    "scales", None
-                )
-                if this_available_model_scales is None:
-                    model_scales.append(1.0)
-                else:
-                    # TODO (stao): use the batched RNG
-                    model_scales[model_id] = self.np_random.choice(
-                        this_available_model_scales
-                    )
-        self.episode_model_scales = model_scales
-        model_bbox_sizes = dict()
-        for model_id in [self.source_obj_name, self.target_obj_name]:
-            model_info = self.model_db[model_id]
-            model_scale = self.episode_model_scales[model_id]
-            if "bbox" in model_info:
-                bbox = model_info["bbox"]
-                bbox_size = np.array(bbox["max"]) - np.array(bbox["min"])
-                model_bbox_sizes[model_id] = common.to_tensor(
-                    bbox_size * model_scale, device=self.device
-                )
-            else:
-                raise ValueError(f"Model {model_id} does not have bbox info.")
-        self.episode_model_bbox_sizes = model_bbox_sizes
 
         for obj_name in self.objects_excluded_from_greenscreening:
             self.remove_object_from_greenscreen(self.objs[obj_name])
@@ -412,27 +382,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                                             q=self.quat_configs[
                                                 quat_episode_ids, i])
                     )
-            # NOTE!!!!!!!
-            # During GPU parallel stepping, calling self._settle() will affect
-            # all simulations regardless of supplying env_idx. This causes
-            # significant drift. Therefore, we just comment it out.
 
-            # if self.gpu_sim_enabled:
-            #     self.scene._gpu_apply_all()
-            # self._settle(0.5)
-            # if self.gpu_sim_enabled:
-            #     self.scene._gpu_fetch_all()
-            # # Some objects need longer time to settle
-            # lin_vel, ang_vel = 0.0, 0.0
-            # for obj_name, obj in self.objs.items():
-            #     lin_vel += torch.linalg.norm(obj.linear_velocity)
-            #     ang_vel += torch.linalg.norm(obj.angular_velocity)
-            # if lin_vel > 1e-3 or ang_vel > 1e-2:
-            #     if self.gpu_sim_enabled:
-            #         self.scene._gpu_apply_all()
-            #     self._settle(6)
-            #     if self.gpu_sim_enabled:
-            #         self.scene._gpu_fetch_all()
             # measured values for bridge dataset
             if self.scene_setting == "flat_table" or self.scene_setting == "hobot2_flat_table":
                 qpos = np.array(
@@ -469,141 +419,13 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 )
             self.agent.reset(init_qpos=qpos)
 
-            # figure out object bounding boxes after settling. This is used to determine if an object is near the target object
-            self.episode_source_obj_xyz_after_settle = self.objs[
-                self.source_obj_name
-            ].pose.p
-            self.episode_target_obj_xyz_after_settle = self.objs[
-                self.target_obj_name
-            ].pose.p
-            self.episode_obj_xyzs_after_settle = {
-                obj_name: self.objs[obj_name].pose.p for obj_name in self.objs.keys()
-            }
-            self.episode_source_obj_bbox_world = self.episode_model_bbox_sizes[
-                self.source_obj_name
-            ].float()
-            self.episode_target_obj_bbox_world = self.episode_model_bbox_sizes[
-                self.target_obj_name
-            ].float()
-            self.episode_source_obj_bbox_world = (
-                rotation_conversions.quaternion_to_matrix(
-                    self.objs[self.source_obj_name].pose.q
-                )
-                @ self.episode_source_obj_bbox_world[..., None]
-            )[0, :, 0]
-            """source object bbox size (3, )"""
-            self.episode_target_obj_bbox_world = (
-                rotation_conversions.quaternion_to_matrix(
-                    self.objs[self.target_obj_name].pose.q
-                )
-                @ self.episode_target_obj_bbox_world[..., None]
-            )[0, :, 0]
-            """target object bbox size (3, )"""
-
-            # stats to track
-            self.consecutive_grasp = torch.zeros((b,), dtype=torch.int32)
-            self.episode_stats = dict(
-                # all_obj_keep_height=torch.zeros((b,), dtype=torch.bool),
-                moved_correct_obj=torch.zeros((b,), dtype=torch.bool),
-                moved_wrong_obj=torch.zeros((b,), dtype=torch.bool),
-                # near_tgt_obj=torch.zeros((b,), dtype=torch.bool),
-                is_src_obj_grasped=torch.zeros((b,), dtype=torch.bool),
-                # is_closest_to_tgt=torch.zeros((b,), dtype=torch.bool),
-                consecutive_grasp=torch.zeros((b,), dtype=torch.bool),
-            )
-
-    def _settle(self, t: int = 0.5):
-        """run the simulation for some steps to help settle the objects"""
-        sim_steps = int(self.sim_freq * t / self.control_freq)
-        for _ in range(sim_steps):
-            self.scene.step()
-
     def _evaluate(
         self,
         success_require_src_completely_on_target=True,
         z_flag_required_offset=0.02,
         **kwargs,
     ):
-        with torch.device("cpu"):
-            source_object = self.objs[self.source_obj_name]
-            target_object = self.objs[self.target_obj_name]
-            source_obj_pose = source_object.pose
-            target_obj_pose = target_object.pose
-
-            # whether moved the correct object
-            source_obj_xy_move_dist = torch.linalg.norm(
-                self.episode_source_obj_xyz_after_settle[:, :2]
-                - source_obj_pose.p[:, :2],
-                dim=1,
-            )
-            other_obj_xy_move_dist = []
-            for obj_name in self.objs.keys():
-                obj = self.objs[obj_name]
-                obj_xyz_after_settle = self.episode_obj_xyzs_after_settle[obj_name]
-                if obj.name == self.source_obj_name:
-                    continue
-                other_obj_xy_move_dist.append(
-                    torch.linalg.norm(
-                        obj_xyz_after_settle[:, :2] - obj.pose.p[:, :2], dim=1
-                    )
-                )
-            # moved_correct_obj = (source_obj_xy_move_dist > 0.03) and (
-            #     all([x < source_obj_xy_move_dist for x in other_obj_xy_move_dist])
-            # )
-            # moved_wrong_obj = any([x > 0.03 for x in other_obj_xy_move_dist]) and any(
-            #     [x > source_obj_xy_move_dist for x in other_obj_xy_move_dist]
-            # )
-            # moved_correct_obj = False
-            # moved_wrong_obj = False
-
-            # whether the source object is grasped
-            is_src_obj_grasped = self.agent.is_grasping(source_object)
-            # if is_src_obj_grasped:
-            self.consecutive_grasp += is_src_obj_grasped
-            self.consecutive_grasp[is_src_obj_grasped == 0] = 0
-            consecutive_grasp = self.consecutive_grasp >= 5
-
-            # whether the source object is on the target object based on bounding box position
-            tgt_obj_half_length_bbox = (
-                self.episode_target_obj_bbox_world / 2
-            )  # get half-length of bbox xy diagonol distance in the world frame at timestep=0
-            src_obj_half_length_bbox = self.episode_source_obj_bbox_world / 2
-
-            pos_src = source_obj_pose.p
-            pos_tgt = target_obj_pose.p
-            offset = pos_src - pos_tgt
-            xy_flag = (
-                torch.linalg.norm(offset[:, :2], dim=1)
-                <= torch.linalg.norm(tgt_obj_half_length_bbox[:2]) + 0.003
-            )
-            z_flag = (offset[:, 2] > 0) & (
-                offset[:, 2] - tgt_obj_half_length_bbox[2] - src_obj_half_length_bbox[2]
-                <= z_flag_required_offset
-            )
-            src_on_target = xy_flag & z_flag
-            # src_on_target = False
-
-            if success_require_src_completely_on_target:
-                # whether the source object is on the target object based on contact information
-                contact_forces = self.scene.get_pairwise_contact_forces(
-                    source_object, target_object
-                )
-                net_forces = torch.linalg.norm(contact_forces, dim=1)
-                src_on_target = src_on_target & (net_forces > 0.05)
-
-            success = src_on_target
-
-            # self.episode_stats["moved_correct_obj"] = moved_correct_obj
-            # self.episode_stats["moved_wrong_obj"] = moved_wrong_obj
-            self.episode_stats["src_on_target"] = src_on_target
-            self.episode_stats["is_src_obj_grasped"] = (
-                self.episode_stats["is_src_obj_grasped"] | is_src_obj_grasped
-            )
-            self.episode_stats["consecutive_grasp"] = (
-                self.episode_stats["consecutive_grasp"] | consecutive_grasp
-            )
-
-        return dict(**self.episode_stats, success=success)
+        return {}
 
     def is_final_subtask(self):
         # whether the current subtask is the final one, only meaningful for long-horizon tasks
