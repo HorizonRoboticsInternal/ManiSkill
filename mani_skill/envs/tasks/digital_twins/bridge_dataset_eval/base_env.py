@@ -176,12 +176,16 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         obj_names: List[str],
         xyz_configs: torch.Tensor,
         quat_configs: torch.Tensor,
+        obj_perturb_radius: float = 0.0,
+        obj_sample_orientations: bool = False,
         **kwargs,
     ):
         self.objs: Dict[str, Actor] = dict()
         self.obj_names = obj_names
         self.xyz_configs = xyz_configs
         self.quat_configs = quat_configs
+        self.obj_perturb_radius = obj_perturb_radius
+        self.obj_sample_orientations = obj_sample_orientations
         if (
             self.scene_setting == "flat_table"
             or self.scene_setting == "hobot2_flat_table"
@@ -374,13 +378,46 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             else:
                 pos_episode_ids = torch.randint(0, len(self.xyz_configs), size=(b,))
                 quat_episode_ids = torch.randint(0, len(self.quat_configs), size=(b,))
+
+            def sample_random_2d_displacements(n: int, r: float):
+                u = torch.rand(n)  # Uniform[0, 1)
+                radii = r * torch.sqrt(u)  # sqrt ensures uniform density
+                angles = torch.rand(n) * 2 * torch.pi  # Uniform[0, 2pi)
+                displacements = torch.stack(
+                    (radii * torch.cos(angles), radii * torch.sin(angles)),
+                    dim=1
+                )
+                return displacements
+
+            def sample_random_yaw_quaternions(n: int):
+                angles = torch.rand(n) * 2 * torch.pi  # Uniform[0, 2pi)
+                half_angles = angles / 2
+
+                w = torch.cos(half_angles)
+                x = torch.zeros(n)
+                y = torch.zeros(n)
+                z = torch.sin(half_angles)
+
+                quaternions = torch.stack((w, x, y, z), dim=1)  # shape (n, 4)
+                return quaternions
+
             if reset_objects:
                 for i, actor in enumerate(self.objs.values()):
                     xyz = self.xyz_configs[pos_episode_ids, i]
+                    quat = self.quat_configs[quat_episode_ids, i]
+
+                    bs = xyz.shape[0]
+                    if self.obj_perturb_radius > 0.0:
+                        xyz[:, :2] += sample_random_2d_displacements(
+                            bs, self.obj_perturb_radius
+                        )
+
+                    if self.obj_sample_orientations:
+                        quat = sample_random_yaw_quaternions(bs)
+
                     actor.set_pose(
                         Pose.create_from_pq(p=xyz,
-                                            q=self.quat_configs[
-                                                quat_episode_ids, i])
+                                            q=quat)
                     )
 
             # measured values for bridge dataset
