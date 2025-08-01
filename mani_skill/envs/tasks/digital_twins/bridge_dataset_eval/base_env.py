@@ -208,13 +208,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             robot_cls = kwargs["robot_cls"]
             del kwargs["robot_cls"]
 
-        if "hobot2" in self.scene_setting:
-            self.model_db = io_utils.load_json(self.HOBOT2_CUSTOM_FILES /
-                                               self.MODEL_JSON)
-        else:
-            self.model_db: Dict[str, Dict] = io_utils.load_json(
-                BRIDGE_DATASET_ASSET_PATH / "custom/" / self.MODEL_JSON
-            )
+        self.model_db = io_utils.load_json(self.HOBOT2_CUSTOM_FILES /
+                                           self.MODEL_JSON)
 
         super().__init__(
             robot_uids=robot_cls,
