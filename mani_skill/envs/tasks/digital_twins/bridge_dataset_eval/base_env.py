@@ -397,18 +397,22 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 return quaternions
 
             if reset_objects:
-                for i, actor in enumerate(self.objs.values()):
+                for i, (name, actor) in enumerate(self.objs.items()):
                     xyz = self.xyz_configs[pos_episode_ids, i]
                     quat = self.quat_configs[quat_episode_ids, i]
 
                     bs = xyz.shape[0]
-                    if self.obj_perturb_radius > 0.0:
-                        xyz[:, :2] += sample_random_2d_displacements(
-                            bs, self.obj_perturb_radius
-                        )
 
-                    if self.obj_sample_orientations:
-                        quat = sample_random_yaw_quaternions(bs)
+                    # Exclude dummy objects from random sampling. These are usually objects that are
+                    # meant to be spawned statically.
+                    if "dummy" not in name:
+                        if self.obj_perturb_radius > 0.0:
+                            xyz[:, :2] += sample_random_2d_displacements(
+                                bs, self.obj_perturb_radius
+                            )
+
+                        if self.obj_sample_orientations:
+                            quat = sample_random_yaw_quaternions(bs)
 
                     actor.set_pose(
                         Pose.create_from_pq(p=xyz,
