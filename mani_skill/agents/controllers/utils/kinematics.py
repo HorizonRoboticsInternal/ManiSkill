@@ -19,6 +19,14 @@ from mani_skill.utils.structs.articulation import Articulation
 from mani_skill.utils.structs.articulation_joint import ArticulationJoint
 from mani_skill.utils.structs.pose import Pose
 
+from loguru import logger
+KINCPP_SOLVER_FOUND = False
+try:
+    from hobot.robot_common.widowx250s_kinematics import WidowX250sKinematicsSolver
+    KINCPP_SOLVER_FOUND = True
+except ImportError:
+    logger.warning("WidowX250sKinematicsSolver not found. Probably need to install hobot.")
+
 # currently fast_kinematics has some bugs on some systems so we use the slower pytorch kinematics package instead.
 # try:
 #     import fast_kinematics
@@ -44,6 +52,15 @@ class Kinematics:
             articulation (Articulation): the articulation object
             active_joint_indices (torch.Tensor): indices of the active joints that can be controlled
         """
+        if KINCPP_SOLVER_FOUND:
+            self._solver = WidowX250sKinematicsSolver()
+
+            # TODO: Support configuring the solver based off of the robot later.
+            #  For now, we're only using WidowX so we'll just hardcode.
+            if "widowx" not in urdf_path:
+                logger.error(f"Using kincpp WidowX250sKinematicsSolver but a different URDF:"
+                             f" {urdf_path} was provided.")
+
         self.urdf_path = urdf_path
         self.end_link = articulation.links_map[end_link_name]
         self.end_link_idx = articulation.links.index(self.end_link)
@@ -154,22 +171,39 @@ class Kinematics:
                 # TODO return mask for invalid solutions. CPU returns None at the moment
                 return result.solutions[:, 0, :]
             else:
-                jacobian = self.pk_chain.jacobian(q0)
-                # code commented out below is the fast kinematics method
-                # jacobian = (
-                #     self.fast_kinematics_model.jacobian_mixed_frame_pytorch(
-                #         self.articulation.get_qpos()[:, self.active_ancestor_joint_idxs]
-                #     )
-                #     .view(-1, len(self.active_ancestor_joints), 6)
-                #     .permute(0, 2, 1)
-                # )
-                # jacobian = jacobian[:, :, self.qmask]
-                if pos_only:
-                    jacobian = jacobian[:, 0:3]
 
-                # NOTE (stao): this method of IK is from https://mathweb.ucsd.edu/~sbuss/ResearchWeb/ikmethods/iksurvey.pdf by Samuel R. Buss
-                delta_joint_pos = torch.linalg.pinv(jacobian) @ action.unsqueeze(-1)
-                return q0 + delta_joint_pos.squeeze(-1)
+                # If kincpp solver is not available, use the one step Jacobian delta IK method
+                # Note that this method has large errors and is quite slow.
+                if not KINCPP_SOLVER_FOUND:
+                    jacobian = self.pk_chain.jacobian(q0)
+                    # code commented out below is the fast kinematics method
+                    # jacobian = (
+                    #     self.fast_kinematics_model.jacobian_mixed_frame_pytorch(
+                    #         self.articulation.get_qpos()[:, self.active_ancestor_joint_idxs]
+                    #     )
+                    #     .view(-1, len(self.active_ancestor_joints), 6)
+                    #     .permute(0, 2, 1)
+                    # )
+                    # jacobian = jacobian[:, :, self.qmask]
+                    if pos_only:
+                        jacobian = jacobian[:, 0:3]
+
+                    # NOTE (stao): this method of IK is from https://mathweb.ucsd.edu/~sbuss/ResearchWeb/ikmethods/iksurvey.pdf by Samuel R. Buss
+                    delta_joint_pos = torch.linalg.pinv(jacobian) @ action.unsqueeze(-1)
+                    return q0 + delta_joint_pos.squeeze(-1)
+
+                else:
+                    # If kincpp solver is available, use the batched inverse kinematics method
+                    # Results are much more exact and 2 orders of magnitude faster.
+                    joint_angles = q0.cpu().numpy()
+                    desired_ee_tfs = target_pose.to_transformation_matrix().cpu().numpy()
+
+                    # Parallelized using OMP_NUM_THREADS threads
+                    target_angles = self._solver.batched_inv_kin(
+                        desired_ee_tfs,
+                        joint_angles
+                    )[1]
+                    return torch.tensor(target_angles, dtype=torch.float32).to(q0.device)
         else:
             result, success, error = self.pmodel.compute_inverse_kinematics(
                 self.end_link_idx,
