@@ -5,11 +5,11 @@ import os
 from pathlib import Path
 from typing import Dict, List, Literal
 
+from abc import ABC, abstractmethod
 import numpy as np
 import sapien
 import torch
 from sapien.physx import PhysxMaterial
-from transforms3d.quaternions import quat2mat
 
 from mani_skill import ASSET_DIR
 from mani_skill.agents.controllers.pd_ee_pose import PDEEPoseControllerConfig
@@ -19,7 +19,6 @@ from mani_skill.agents.robots.widowx.widowx import WidowX250S
 from mani_skill.envs.tasks.digital_twins.base_env import BaseDigitalTwinEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common, io_utils, sapien_utils
-from mani_skill.utils.geometry import rotation_conversions
 from mani_skill.utils.structs.actor import Actor
 from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import SimConfig
@@ -155,7 +154,7 @@ class WidowX250SBridgeDatasetSink(WidowX250SBridgeDatasetFlatTable):
         ]
 
 
-class BaseBridgeEnv(BaseDigitalTwinEnv):
+class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
     """Base Digital Twin environment for digital twins of the BridgeData v2"""
 
     MODEL_JSON = "info_bridge_custom_v0.json"
@@ -356,104 +355,9 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             self.remove_object_from_greenscreen(self.objs[obj_name])
         self.remove_object_from_greenscreen(self.agent.robot)
 
+    @abstractmethod
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
-        # NOTE: this part of code is not GPU parallelized
-        with torch.device(self.device):
-            reset_objects = options.get("reset_objects", True)
-            b = len(env_idx)
-            if "episode_id" in options:
-                if isinstance(options["episode_id"], int):
-                    options["episode_id"] = torch.tensor([options["episode_id"]])
-                    assert len(options["episode_id"]) == b
-                pos_episode_ids = (
-                    options["episode_id"]
-                    % (len(self.xyz_configs) * len(self.quat_configs))
-                ) // len(self.quat_configs)
-                quat_episode_ids = options["episode_id"] % len(self.quat_configs)
-            else:
-                pos_episode_ids = torch.randint(0, len(self.xyz_configs), size=(b,))
-                quat_episode_ids = torch.randint(0, len(self.quat_configs), size=(b,))
-
-            def sample_random_2d_displacements(n: int, r: float):
-                u = torch.rand(n)  # Uniform[0, 1)
-                radii = r * torch.sqrt(u)  # sqrt ensures uniform density
-                angles = torch.rand(n) * 2 * torch.pi  # Uniform[0, 2pi)
-                displacements = torch.stack(
-                    (radii * torch.cos(angles), radii * torch.sin(angles)),
-                    dim=1
-                )
-                return displacements
-
-            def sample_random_yaw_quaternions(n: int):
-                angles = torch.rand(n) * 2 * torch.pi  # Uniform[0, 2pi)
-                half_angles = angles / 2
-
-                w = torch.cos(half_angles)
-                x = torch.zeros(n)
-                y = torch.zeros(n)
-                z = torch.sin(half_angles)
-
-                quaternions = torch.stack((w, x, y, z), dim=1)  # shape (n, 4)
-                return quaternions
-
-            if reset_objects:
-                for i, (name, actor) in enumerate(self.objs.items()):
-                    xyz = self.xyz_configs[pos_episode_ids, i]
-                    quat = self.quat_configs[quat_episode_ids, i]
-
-                    bs = xyz.shape[0]
-
-                    # Exclude dummy objects from random sampling. These are usually objects that are
-                    # meant to be spawned statically.
-                    if "dummy" not in name:
-                        if self.obj_perturb_radius > 0.0:
-                            xyz[:, :2] += sample_random_2d_displacements(
-                                bs, self.obj_perturb_radius
-                            )
-
-                        if self.obj_sample_orientations:
-                            quat = sample_random_yaw_quaternions(bs)
-
-                    actor.set_pose(
-                        Pose.create_from_pq(p=xyz,
-                                            q=quat)
-                    )
-
-            # measured values for bridge dataset
-            if self.scene_setting == "flat_table" or self.scene_setting == "hobot2_flat_table":
-                qpos = np.array(
-                    [
-                        -0.01840777,
-                        0.0398835,
-                        0.22242722,
-                        -0.00460194,
-                        1.36524296,
-                        0.00153398,
-                        0.037,
-                        0.037,
-                    ]
-                )
-
-                self.agent.robot.set_pose(
-                    sapien.Pose([0.147, 0.028, 0.870], q=[0, 0, 0, 1])
-                )
-            elif self.scene_setting == "sink":
-                qpos = np.array(
-                    [
-                        -0.2600599,
-                        -0.12875618,
-                        0.04461369,
-                        -0.00652761,
-                        1.7033415,
-                        -0.26983038,
-                        0.037,
-                        0.037,
-                    ]
-                )
-                self.agent.robot.set_pose(
-                    sapien.Pose([0.127, 0.060, 0.85], q=[0, 0, 0, 1])
-                )
-            self.agent.reset(init_qpos=qpos)
+        pass
 
     def _evaluate(
         self,
