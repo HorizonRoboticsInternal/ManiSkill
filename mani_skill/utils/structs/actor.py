@@ -380,8 +380,13 @@ class Actor(PhysxRigidDynamicComponentStruct[sapien.Entity]):
             # Avoid broadcasting by expanding the matrix.
             # https://github.com/pytorch/pytorch/issues/79987
             mask = self._body_data_index[self.scene._reset_mask[self._scene_idxs]]
-            self.px.cuda_rigid_body_data.torch()[mask, :7] = (
-                arg1.expand(mask.shape[0], 7))
+            if mask.shape[0] == arg1.shape[0]:
+                self.px.cuda_rigid_body_data.torch()[mask, :7] = (
+                    arg1)
+            else:
+                # Should only need broadcasting if passing in a sapien.Pose or batch dimension is not the same as mask
+                self.px.cuda_rigid_body_data.torch()[mask, :7] = (
+                    arg1.expand(mask.shape[0], 7))
 
         else:
             if isinstance(arg1, sapien.Pose):
