@@ -16,6 +16,7 @@ from mani_skill.agents.controllers.pd_ee_pose import PDEEPoseControllerConfig
 from mani_skill.agents.controllers.pd_joint_pos import PDJointPosMimicControllerConfig
 from mani_skill.agents.registration import register_agent
 from mani_skill.agents.robots.widowx.widowx import WidowX250S
+from mani_skill.envs.scene import ManiSkillScene
 from mani_skill.envs.tasks.digital_twins.base_env import BaseDigitalTwinEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common, io_utils, sapien_utils
@@ -243,6 +244,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
         scale: float = 1,
         kinematic: bool = False,
         initial_pose: Pose = None,
+        env_idx: int = None,
+        hide_visual: bool = False,
     ):
         """helper function to build actors by ID directly and auto configure physical materials"""
         density = self.model_db[model_id].get("density", 1000)
@@ -274,18 +277,27 @@ class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
             decomposition=mesh_decomposition
         )
 
-        visual_file = str(model_dir / "textured.obj")
-        if not os.path.exists(visual_file):
-            visual_file = str(model_dir / "textured.dae")
+        if not hide_visual:
+            visual_file = str(model_dir / "textured.obj")
             if not os.path.exists(visual_file):
-                visual_file = str(model_dir / "textured.glb")
-        builder.add_visual_from_file(filename=visual_file, scale=[scale] * 3)
+                visual_file = str(model_dir / "textured.dae")
+                if not os.path.exists(visual_file):
+                    visual_file = str(model_dir / "textured.glb")
+            builder.add_visual_from_file(filename=visual_file, scale=[scale] * 3)
+
         if initial_pose is not None:
             builder.initial_pose = initial_pose
-        if kinematic:
-            actor = builder.build_kinematic(name=model_id)
+
+        if env_idx is not None:
+            builder.set_scene_idxs([env_idx])
+            name = f"{model_id}_{env_idx}"
         else:
-            actor = builder.build(name=model_id)
+            name = model_id
+
+        if kinematic:
+            actor = builder.build_kinematic(name=name)
+        else:
+            actor = builder.build(name=name)
         return actor
 
     def _load_lighting(self, options: dict):
