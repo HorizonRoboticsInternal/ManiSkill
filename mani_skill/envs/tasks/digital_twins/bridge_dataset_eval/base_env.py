@@ -2,7 +2,6 @@
 Base environment for Bridge dataset environments
 """
 import os
-from pathlib import Path
 from typing import Dict, List, Literal
 
 from abc import ABC, abstractmethod
@@ -22,8 +21,6 @@ from mani_skill.utils import common, io_utils, sapien_utils
 from mani_skill.utils.structs.actor import Actor
 from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import SimConfig
-
-from hobot2 import HOBOT2_ROOT
 
 BRIDGE_DATASET_ASSET_PATH = ASSET_DIR / "tasks/bridge_v2_real2sim_dataset/"
 HOBOT2_ASSET_PATH = ASSET_DIR / "hobot2_mani_skill_assets"
@@ -167,8 +164,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
     obj_static_friction = 0.5
     obj_dynamic_friction = 0.5
 
-    HOBOT2_CUSTOM_FILES = (Path(HOBOT2_ROOT) /
-               "environment/hobot2_mani_skill_files")
+    BRIDGE_CUSTOM_FILES = BRIDGE_DATASET_ASSET_PATH / "custom"
 
     def __init__(
         self,
@@ -207,8 +203,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
             robot_cls = kwargs["robot_cls"]
             del kwargs["robot_cls"]
 
-        self.model_db = io_utils.load_json(self.HOBOT2_CUSTOM_FILES /
-                                           self.MODEL_JSON)
+        self.model_db = io_utils.load_json(self.BRIDGE_CUSTOM_FILES / self.MODEL_JSON)
 
         super().__init__(
             robot_uids=robot_cls,
@@ -317,7 +312,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv, ABC):
         scene_pose = sapien.Pose(q=[0.707, 0.707, 0, 0])
         scene_offset = np.array([-2.0634, -2.8313, 0.0])
         if self.scene_setting == "hobot2_flat_table":
-            scene_file = str(self.HOBOT2_CUSTOM_FILES /
+            scene_file = str(self.BRIDGE_CUSTOM_FILES /
                 "hobot2_bridge_tabletop_scene.glb"
             )
 

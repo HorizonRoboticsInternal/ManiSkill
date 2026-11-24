@@ -22,10 +22,10 @@ from mani_skill.utils.structs.pose import Pose
 from loguru import logger
 KINCPP_SOLVER_FOUND = False
 try:
-    from hobot.robot_common.widowx250s_kinematics import WidowX250sKinematicsSolver
+    from src.robots.widowx250s_kinematics import WidowX250sKinematicsSolver
     KINCPP_SOLVER_FOUND = True
 except ImportError:
-    logger.warning("WidowX250sKinematicsSolver not found. Probably need to install hobot.")
+    logger.warning("WidowX kincpp solver unavailable. Using the Jacobian solver.")
 
 # currently fast_kinematics has some bugs on some systems so we use the slower pytorch kinematics package instead.
 # try:
